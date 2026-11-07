@@ -27,7 +27,9 @@ try:
 except ImportError:
     pass
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+# gemini-3.5-flash: ~2 s per note. gemini-3.8-flash gave the same findings but took ~3 min per note.
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+THINKING = os.getenv("GEMINI_THINKING", "low")  # "" to use the model default
 MIN_SECONDS_BETWEEN_CALLS = float(os.getenv("GEMINI_MIN_INTERVAL", "7"))  # free tier
 CACHE_DIR = Path(__file__).parent / ".cache" / "extract"
 _last_call = 0.0
@@ -84,7 +86,8 @@ def extract_gemini(note: str, retries: int = 4) -> dict:
 
     client = genai.Client(api_key=_api_key())
     config = types.GenerateContentConfig(
-        response_mime_type="application/json", response_schema=Findings, temperature=0)
+        response_mime_type="application/json", response_schema=Findings, temperature=0,
+        thinking_config=types.ThinkingConfig(thinking_level=THINKING) if THINKING else None)
     delay = 10.0
     for attempt in range(retries + 1):
         wait = MIN_SECONDS_BETWEEN_CALLS - (time.time() - _last_call)
