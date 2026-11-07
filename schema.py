@@ -1,97 +1,74 @@
 """Findings schema shared by extract.py, score.py, timeline.py and app.py.
 
-One clinical note -> one NoteFindings. Every red-flag feature has the same shape:
-    status:   "present" | "absent" | "not_mentioned"
-    regions:  body regions it involves (bulbar, cervical, thoracic, lumbosacral)
-    evidence: a short quote from the note that supports the status
+One note -> one findings dict:
+    true  = the note says it is present
+    false = the note says it was checked and is absent
+    null  = the note does not mention it
+
+Example:
+{
+  "date": "2024-10-14", "source": "GP referral",
+  "weakness_regions": ["right hand"],
+  "painless": true, "sensory_symptoms": false, "wasting": true, "fasciculations": false,
+  "cramps": true, "brisk_reflexes": null, "upgoing_plantar_or_hoffmann": null,
+  "normal_sensory_nerve_tests": null, "failed_local_treatment": false, "weight_loss": false,
+  "speech_or_swallow_change": false, "breathing_change": false,
+  "evidence": [{"field": "wasting", "quote": "thenar wasting noted"}]
+}
+"evidence" is extra (not in the original spec): short quotes so the app can show WHY.
 """
 from __future__ import annotations
 
-from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
-
-class Status(str, Enum):
-    present = "present"
-    absent = "absent"
-    not_mentioned = "not_mentioned"
-
-
-class Region(str, Enum):
-    bulbar = "bulbar"            # speech, swallowing, tongue, face
-    cervical = "cervical"        # neck, arms, hands
-    thoracic = "thoracic"        # trunk, chest wall, breathing muscles
-    lumbosacral = "lumbosacral"  # legs, feet
-
-
-class NoteType(str, Enum):
-    gp = "gp"
-    referral = "referral"
-    consult = "consult"
-    physio = "physio"
-    emg = "emg"
-    imaging = "imaging"
-    surgery = "surgery"
-    other = "other"
-
-
-class Finding(BaseModel):
-    status: Status = Status.not_mentioned
-    regions: list[Region] = Field(default_factory=list)
-    evidence: str = ""
-
-
-# Feature name -> what it means. The prompt in extract.py is built from this,
-# so add or rename features here only.
-FEATURES: dict[str, str] = {
-    "painless_weakness": "Muscle weakness that is NOT explained by pain (painless, or pain is minor).",
-    "muscle_atrophy": "Muscle wasting / atrophy (e.g. thenar or first dorsal interosseous wasting, thin calves).",
-    "fasciculations": "Fasciculations / muscle twitching seen or reported.",
+# Yes/no findings, with a plain-English meaning. The Gemini prompt is built from this.
+FLAGS: dict[str, str] = {
+    "painless": "The weakness is painless (no significant pain with it).",
+    "sensory_symptoms": "Numbness, tingling, pins and needles, or reduced sensation. (ALS usually has NONE.)",
+    "wasting": "Muscle wasting / atrophy: muscles visibly thinner, e.g. at the base of the thumb.",
+    "fasciculations": "Fasciculations: small visible muscle twitches under the skin.",
     "cramps": "Muscle cramps.",
-    "umn_signs": "Upper motor neuron signs: brisk/hyperactive reflexes, Hoffmann, Babinski/up-going plantar, clonus, spasticity.",
-    "reduced_reflexes": "Reduced or absent reflexes in a weak limb.",
-    "sensory_normal": "Sensation documented as normal/intact in the affected area.",
-    "sensory_loss": "Objective sensory loss, numbness, or abnormal sensory nerve conduction.",
-    "significant_pain": "Pain is a major feature of the presentation.",
-    "bulbar_symptoms": "Slurred speech (dysarthria), swallowing difficulty (dysphagia), tongue wasting or tongue fasciculations.",
-    "respiratory_symptoms": "Shortness of breath, orthopnea, reduced FVC, morning headaches from hypoventilation.",
+    "brisk_reflexes": "Brisk / hyperactive / increased reflexes, or clonus or spasticity.",
+    "upgoing_plantar_or_hoffmann": "Up-going plantar (positive Babinski) or positive Hoffmann sign.",
+    "normal_sensory_nerve_tests": "Nerve conduction study shows NORMAL sensory nerves.",
+    "failed_local_treatment": "No improvement after a local treatment, e.g. carpal tunnel surgery, splint, physio, injection.",
     "weight_loss": "Unintentional weight loss.",
-    "progression": "Symptoms are getting worse over time.",
-    "treatment_failure": "No improvement after treatment (e.g. carpal tunnel release, physio, steroid injection, surgery).",
-    "emg_denervation": "EMG shows active and/or chronic denervation, especially in more than one region.",
-    "conduction_block": "Nerve conduction shows motor conduction block (points toward MMN, an ALS mimic).",
+    "speech_or_swallow_change": "Slurred speech, swallowing trouble, choking, or tongue wasting/twitching.",
+    "breathing_change": "Shortness of breath, breathless lying flat, or reduced breathing test (FVC).",
 }
+
+FIELDS = ["date", "source", "weakness_regions", *FLAGS]
+
+
+class Evidence(BaseModel):
+    field: str = Field(description="One of the finding names")
+    quote: str = Field(description="Short exact quote from the note")
 
 
 class Findings(BaseModel):
-    painless_weakness: Finding = Field(default_factory=Finding)
-    muscle_atrophy: Finding = Field(default_factory=Finding)
-    fasciculations: Finding = Field(default_factory=Finding)
-    cramps: Finding = Field(default_factory=Finding)
-    umn_signs: Finding = Field(default_factory=Finding)
-    reduced_reflexes: Finding = Field(default_factory=Finding)
-    sensory_normal: Finding = Field(default_factory=Finding)
-    sensory_loss: Finding = Field(default_factory=Finding)
-    significant_pain: Finding = Field(default_factory=Finding)
-    bulbar_symptoms: Finding = Field(default_factory=Finding)
-    respiratory_symptoms: Finding = Field(default_factory=Finding)
-    weight_loss: Finding = Field(default_factory=Finding)
-    progression: Finding = Field(default_factory=Finding)
-    treatment_failure: Finding = Field(default_factory=Finding)
-    emg_denervation: Finding = Field(default_factory=Finding)
-    conduction_block: Finding = Field(default_factory=Finding)
+    date: Optional[str] = Field(None, description="Date of the note as YYYY-MM-DD, or null")
+    source: Optional[str] = Field(None, description="Who wrote it, e.g. 'GP referral', 'physio', 'neurology consult'")
+    weakness_regions: list[str] = Field(default_factory=list,
+                                        description="Where there is weakness, e.g. 'right hand', 'left foot', 'speech'")
+    painless: Optional[bool] = None
+    sensory_symptoms: Optional[bool] = None
+    wasting: Optional[bool] = None
+    fasciculations: Optional[bool] = None
+    cramps: Optional[bool] = None
+    brisk_reflexes: Optional[bool] = None
+    upgoing_plantar_or_hoffmann: Optional[bool] = None
+    normal_sensory_nerve_tests: Optional[bool] = None
+    failed_local_treatment: Optional[bool] = None
+    weight_loss: Optional[bool] = None
+    speech_or_swallow_change: Optional[bool] = None
+    breathing_change: Optional[bool] = None
+    evidence: list[Evidence] = Field(default_factory=list)
 
 
-class NoteFindings(BaseModel):
-    """What extract() returns for one note."""
-    note_date: Optional[str] = Field(None, description="YYYY-MM-DD if the note states a date")
-    note_type: NoteType = NoteType.other
-    author_role: str = Field("", description="e.g. family doctor, physiotherapist, neurologist")
-    summary: str = Field("", description="One-sentence plain summary of the note")
-    other_diagnosis_considered: str = Field("", description="Diagnosis the author proposes, if any")
-    findings: Findings = Field(default_factory=Findings)
+def empty_findings() -> dict:
+    return Findings().model_dump()
 
 
-assert set(FEATURES) == set(Findings.model_fields), "FEATURES and Findings must list the same features"
+assert set(FLAGS) | {"date", "source", "weakness_regions", "evidence"} == set(Findings.model_fields)

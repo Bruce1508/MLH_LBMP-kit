@@ -11,19 +11,21 @@ Run on Alex's own notes in order, it would have flagged him in December 2024, ab
 ## Run it
 
 ```bash
+# WSL; keep the venv outside the repo because the repo is in OneDrive
+python3 -m venv ~/venvs/als && source ~/venvs/als/bin/activate
 pip install -r requirements.txt
 cp .env.example .env          # then paste your Gemini API key into .env
 
 python timeline.py data/sample --offline --diagnosis=2025-03-18   # no key needed
-python timeline.py data/alex                                      # uses Gemini
+python timeline.py data/alex --diagnosis=2026-07-15               # uses Gemini
 python score.py data/sample/2024-12-03_gp.txt                     # score one note
 python -m pytest -q
 ```
 
 | File | What it does |
 | --- | --- |
-| `schema.py` | The findings format: 16 red-flag features, each present / absent / not mentioned, with body regions and a quote |
-| `extract.py` | Gemini turns a note into findings (structured output, cached in `.cache/`); keyword fallback when there is no key |
+| `schema.py` | The findings format: each red flag is true / false / null, plus weakness regions and evidence quotes |
+| `extract.py` | `extract_findings()`: Gemini turns a note into findings (structured output, cached in `.cache/`); keyword fallback when there is no key |
 | `score.py` | `combine()` merges a patient's notes; `score()` applies `rules.json` and the Gold Coast pattern |
 | `rules.json` | Weights, thresholds and recommendation wording, editable without code |
 | `timeline.py` | Runs a patient's notes in date order and reports the first date flagged |

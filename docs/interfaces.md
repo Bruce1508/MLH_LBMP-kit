@@ -1,58 +1,75 @@
-# Interfaces (agree at the 1:30 PM schema meeting)
+# Interfaces
 
-Once these are agreed, Peter's pipeline and Bruce's app can be built in parallel.
+These are the functions Bruce's `app.py` and `evaluate.py` call. All of them return plain dicts.
 
-## Functions Bruce calls
+| Function | File | Returns |
+| --- | --- | --- |
+| `extract_findings(note_text, offline=None)` | `extract.py` | findings dict (below) |
+| `combine(findings_list)` | `score.py` | one findings dict merged from several notes (sorted by date) |
+| `score(findings)` | `score.py` | `{"risk", "points", "reasons", "gold_coast", "regions", "advice", "evidence"}` |
+| `run_timeline(notes_dir, offline=None)` | `timeline.py` | `[{"date", "risk", "points", "file", "source", "reasons", "new_findings", "regions", "gold_coast", "findings"}]` |
+| `first_flag(steps, at_least="high")` | `timeline.py` | first timeline step at that risk, or `None` |
 
-| Function | File | Input | Returns |
-| --- | --- | --- | --- |
-| `extract(text, offline=None)` | `extract.py` | note text | `NoteFindings` (pydantic; `.model_dump(mode="json")` for a dict) |
-| `combine(notes, dates=None)` | `score.py` | list of `NoteFindings`, oldest first | merged dict, one entry per feature |
-| `score(findings)` | `score.py` | a `NoteFindings`, a list of them, or a `combine()` result | result dict (below) |
-| `run_timeline(folder, offline=None, diagnosis_date=None)` | `timeline.py` | folder of dated `.txt` notes | `{"steps", "first_urgent", "first_monitor", "final", "months_earlier"?}` |
+The `offline` argument controls which extractor runs:
+- `offline=None` (the default) uses Gemini if `GEMINI_API_KEY` is set and the keyword extractor otherwise.
+- `offline=True` always uses the keyword extractor. Use it to build the UI without spending quota.
 
-`offline=None` means Gemini is used when `GEMINI_API_KEY` is set and the keyword extractor otherwise. Pass `offline=True` to build the UI without spending quota.
+## Findings (one note)
 
-## Findings JSON (one note)
+In the findings, `true` means present, `false` means checked and absent, and `null` means not mentioned.
 
 ```json
 {
-  "note_date": "2024-12-03",
-  "note_type": "gp",
-  "author_role": "family doctor",
-  "summary": "Hand weakness worse despite surgery; new left foot tripping.",
-  "other_diagnosis_considered": "carpal tunnel syndrome",
-  "findings": {
-    "muscle_atrophy": {"status": "present", "regions": ["cervical"], "evidence": "wasting of right thenar"},
-    "sensory_loss":   {"status": "absent",  "regions": [], "evidence": "Denies numbness."},
-    "...": "16 features in total, listed in schema.FEATURES"
-  }
+  "date": "2024-10-14",
+  "source": "GP referral",
+  "weakness_regions": ["right hand"],
+  "painless": true,
+  "sensory_symptoms": false,
+  "wasting": true,
+  "fasciculations": false,
+  "cramps": true,
+  "brisk_reflexes": null,
+  "upgoing_plantar_or_hoffmann": null,
+  "normal_sensory_nerve_tests": null,
+  "failed_local_treatment": false,
+  "weight_loss": false,
+  "speech_or_swallow_change": false,
+  "breathing_change": false,
+  "evidence": [{"field": "wasting", "quote": "thenar wasting noted"}]
 }
 ```
 
-- `status`: `present` · `absent` · `not_mentioned`
-- `regions`: `bulbar` · `cervical` · `thoracic` · `lumbosacral`
+`evidence` is an addition to the agreed schema. It holds short quotes from the note, so the app can show why each finding was set.
 
 ## Score result
 
 ```json
 {
-  "score": 19,
-  "level": "urgent",
-  "gold_coast": true,
-  "recommendation": "Urgent referral to neurology ...",
-  "regions": ["cervical", "lumbosacral"],
+  "risk": "high",
+  "points": 19,
   "reasons": [
-    {"rule": "Muscle wasting", "feature": "muscle_atrophy", "points": 2,
-     "evidence": [{"date": "2024-12-03", "quote": "wasting of right thenar"}]}
-  ]
+    "Matches the Gold Coast pattern: upper + lower motor neuron signs and getting worse",
+    "+3 Weakness has spread to a second region (right arm, left leg)",
+    "+3 Upper and lower motor neuron signs together",
+    "+2 Muscle wasting"
+  ],
+  "gold_coast": true,
+  "regions": ["right arm", "left leg"],
+  "advice": "Urgent referral to neurology ...",
+  "evidence": [{"field": "wasting", "quote": "...", "date": "2024-10-14"}]
 }
 ```
 
-`level` is `urgent` when the Gold Coast pattern is met or the score is at least `thresholds.urgent`, and `monitor` at `thresholds.monitor` or above. Everything else is `low`.
+Risk is set as follows:
+- `high`: at least `risk_thresholds.high` points, or the Gold Coast pattern is met. That pattern is an upper motor neuron sign plus a lower motor neuron sign, plus a sign of getting worse (spread to a second region, or no improvement after local treatment).
+- `medium`: at least `risk_thresholds.medium` points.
+- `low`: everything else.
 
-## Data folders
+All weights and wording live in `rules.json`, so Mia can edit them without touching code.
 
-- `data/alex/` holds Alex's notes (typed by Mia), one `.txt` per document, named `YYYY-MM-DD_<type>.txt`.
-- `data/sample/` holds an invented patient for testing the pipeline.
-- `rules.json` holds the weights, thresholds and wording. Mia edits it; no code changes are needed.
+## How notes are combined
+
+`combine()` merges a patient's notes as follows:
+- A finding that is `true` in any note stays `true`, so signs add up over time.
+- For `sensory_symptoms` and `painless`, the most recent note that mentions them wins. For example, early tingling put down to carpal tunnel is overridden by a later "sensation intact".
+- `weakness_regions` from all notes are joined into one list.

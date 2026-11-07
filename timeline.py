@@ -1,16 +1,16 @@
 """Run a patient's notes in date order and find the first date the tool flags them.
 
-Notes live in one folder, one .txt per document, named by date:
-    data/alex/2024-03-12_gp.txt
-    data/alex/2024-06-02_physio.txt
-(a date inside the note text also works if the filename has none)
+Notes: one .txt per document in a folder, named YYYY-MM-DD_source.txt
+(a date inside the note works too if the filename has none).
 
-    from timeline import run_timeline
-    tl = run_timeline("data/alex")
-    tl["first_urgent"]   -> {"date": "2024-12-03", "file": ..., "score": 12, ...} or None
-    tl["steps"]          -> one row per note: score/level after reading notes 1..i
+    from timeline import run_timeline, first_flag
+    steps = run_timeline("data/alex")
+    # [{"date", "risk", "points", "file", "source", "reasons", "new_findings", "regions"}, ...]
+    # each step = the score after reading notes 1..i together (combine)
+    first_flag(steps)            # first step with risk "high", or None
+    first_flag(steps, "medium")  # first step with risk "medium" or "high"
 
-CLI:  python timeline.py data/alex [--offline]
+CLI:  python timeline.py data/alex [--offline] [--diagnosis=2026-07-15]
 """
 from __future__ import annotations
 
@@ -19,11 +19,12 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from extract import extract
-from schema import NoteFindings, Status
+from extract import extract_findings
+from schema import FLAGS
 from score import combine, load_rules, score
 
 _DATE = re.compile(r"(20\d\d)[-_.](\d\d)[-_.](\d\d)")
+_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 
 def _date_of(path: Path, text: str) -> Optional[str]:
@@ -31,62 +32,53 @@ def _date_of(path: Path, text: str) -> Optional[str]:
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
 
 
-def load_notes(folder: str | Path) -> list[dict]:
-    """[{"file", "date", "text"}] sorted oldest first (undated notes last)."""
+def load_notes(notes_dir: str | Path) -> list[dict]:
+    """[{"file", "date", "text"}] oldest first (undated last)."""
     notes = []
-    for p in Path(folder).glob("*.txt"):
+    for p in Path(notes_dir).glob("*.txt"):
         text = p.read_text(encoding="utf-8")
         notes.append({"file": p.name, "date": _date_of(p, text), "text": text})
     notes.sort(key=lambda n: (n["date"] is None, n["date"] or "", n["file"]))
     return notes
 
 
-def _present(nf: NoteFindings) -> set[str]:
-    return {k for k, v in nf.findings.model_dump().items() if v["status"] == Status.present.value}
-
-
-def run_timeline(folder: str | Path, offline: Optional[bool] = None,
-                 diagnosis_date: Optional[str] = None, rules: Optional[dict] = None) -> dict:
-    rules = rules or load_rules()
-    notes = load_notes(folder)
-    extracted: list[NoteFindings] = []
+def run_timeline(notes_dir: str | Path, offline: Optional[bool] = None) -> list[dict]:
+    rules = load_rules()
+    so_far: list[dict] = []
     steps = []
-    seen: set[str] = set()
-    for n in notes:
-        nf = extract(n["text"], offline=offline)
-        extracted.append(nf)
-        dates = [x["date"] for x in notes[: len(extracted)]]
-        result = score(combine(extracted, dates), rules)
-        new = sorted(_present(nf) - seen)
-        seen |= _present(nf)
+    for n in load_notes(notes_dir):
+        f = extract_findings(n["text"], offline=offline)
+        f["date"] = n["date"] or f.get("date")   # filename date is the source of truth
+        before = combine(so_far) if so_far else None
+        so_far.append(f)
+        merged = combine(so_far)
+        result = score(merged, rules)
+        new = [k for k in FLAGS if merged[k] is True and (before is None or before[k] is not True)]
+        if before is not None:
+            new += [f"weakness: {r}" for r in merged["weakness_regions"] if r not in before["weakness_regions"]]
+        else:
+            new += [f"weakness: {r}" for r in merged["weakness_regions"]]
         steps.append({
-            "date": n["date"],
+            "date": f["date"],
+            "risk": result["risk"],
+            "points": result["points"],
             "file": n["file"],
-            "note_type": nf.note_type.value,
-            "author_role": nf.author_role,
-            "summary": nf.summary,
-            "other_diagnosis_considered": nf.other_diagnosis_considered,
-            "new_findings": new,
-            "score": result["score"],
-            "level": result["level"],
+            "source": f.get("source"),
+            "reasons": result["reasons"],
+            "regions": result["regions"],
             "gold_coast": result["gold_coast"],
-            "result": result,
-            "findings": nf.model_dump(mode="json"),
+            "new_findings": new,
+            "findings": f,
         })
+    return steps
 
-    first_urgent = next((s for s in steps if s["level"] == "urgent"), None)
-    first_monitor = next((s for s in steps if s["level"] in ("monitor", "urgent")), None)
-    out = {
-        "steps": steps,
-        "first_urgent": first_urgent,
-        "first_monitor": first_monitor,
-        "final": steps[-1]["result"] if steps else None,
-    }
-    if diagnosis_date and first_urgent and first_urgent["date"]:
-        d0 = date.fromisoformat(first_urgent["date"])
-        d1 = date.fromisoformat(diagnosis_date)
-        out["months_earlier"] = round((d1 - d0).days / 30.44, 1)
-    return out
+
+def first_flag(steps: list[dict], at_least: str = "high") -> Optional[dict]:
+    return next((s for s in steps if _ORDER[s["risk"]] >= _ORDER[at_least]), None)
+
+
+def months_between(d0: str, d1: str) -> float:
+    return round((date.fromisoformat(d1) - date.fromisoformat(d0)).days / 30.44, 1)
 
 
 if __name__ == "__main__":
@@ -94,19 +86,20 @@ if __name__ == "__main__":
 
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if not args:
-        sys.exit("usage: python timeline.py FOLDER [--offline] [--diagnosis=YYYY-MM-DD]")
+        sys.exit("usage: python timeline.py NOTES_DIR [--offline] [--diagnosis=YYYY-MM-DD]")
     diag = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--diagnosis=")), None)
-    tl = run_timeline(args[0], offline=True if "--offline" in sys.argv else None, diagnosis_date=diag)
+    steps = run_timeline(args[0], offline=True if "--offline" in sys.argv else None)
+    flag = first_flag(steps)
 
-    print(f"{'date':<12}{'score':>6}  {'level':<8} file / new findings")
-    for s in tl["steps"]:
-        mark = " <== FIRST URGENT FLAG" if s is tl["first_urgent"] else ""
-        print(f"{s['date'] or '?':<12}{s['score']:>6}  {s['level']:<8} {s['file']}{mark}")
+    print(f"{'date':<12}{'points':>6}  {'risk':<7} file / new findings")
+    for s in steps:
+        mark = "   <== FIRST HIGH-RISK FLAG" if s is flag else ""
+        print(f"{s['date'] or '?':<12}{s['points']:>6}  {s['risk']:<7} {s['file']}{mark}")
         if s["new_findings"]:
-            print(f"{'':<28}+ {', '.join(s['new_findings'])}")
-    if tl["first_urgent"]:
-        print(f"\nFirst urgent flag: {tl['first_urgent']['date']} ({tl['first_urgent']['file']})")
-        if "months_earlier" in tl:
-            print(f"That is {tl['months_earlier']} months before the diagnosis on {diag}.")
+            print(f"{'':<27}+ {', '.join(s['new_findings'])}")
+    if flag:
+        print(f"\nFirst flagged high risk: {flag['date']} ({flag['file']})")
+        if diag and flag["date"]:
+            print(f"That is {months_between(flag['date'], diag)} months before diagnosis ({diag}).")
     else:
-        print("\nNever reached 'urgent'.")
+        print("\nNever reached high risk.")

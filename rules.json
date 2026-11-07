@@ -1,45 +1,35 @@
 {
-  "_comment": "Red-flag rules for score.py. PLACEHOLDER weights by Peter, to be replaced by Mia's rules (Gold Coast criteria + ReferALS). Edit numbers and text here, no code changes needed.",
+  "_comment": "Red-flag rules for score.py. PLACEHOLDER weights by Peter; Mia replaces these with her rules (Gold Coast criteria + ReferALS). Edit numbers and wording here, no code changes needed. 'when' is the finding's value that earns the points (true or false).",
 
-  "thresholds": {
-    "urgent": 10,
-    "monitor": 5
-  },
+  "risk_thresholds": { "high": 10, "medium": 5 },
 
-  "feature_points": {
-    "painless_weakness":    {"points": 2,  "why": "Painless weakness"},
-    "muscle_atrophy":       {"points": 2,  "why": "Muscle wasting"},
-    "fasciculations":       {"points": 1,  "why": "Fasciculations (twitching)"},
-    "cramps":               {"points": 1,  "why": "Muscle cramps"},
-    "umn_signs":            {"points": 2,  "why": "Upper motor neuron signs (brisk reflexes, Hoffmann, Babinski, spasticity)"},
-    "reduced_reflexes":     {"points": 0,  "why": "Reduced reflexes"},
-    "sensory_normal":       {"points": 1,  "why": "Sensation normal despite weakness"},
-    "sensory_loss":         {"points": -2, "why": "Sensory loss points to a nerve or root problem instead"},
-    "significant_pain":     {"points": -2, "why": "Pain is the main problem (less typical of ALS)"},
-    "bulbar_symptoms":      {"points": 3,  "why": "Bulbar symptoms (speech or swallowing)"},
-    "respiratory_symptoms": {"points": 2,  "why": "Breathing symptoms"},
-    "weight_loss":          {"points": 1,  "why": "Unintentional weight loss"},
-    "progression":          {"points": 2,  "why": "Getting worse over time"},
-    "treatment_failure":    {"points": 2,  "why": "No response to treatment for the presumed cause"},
-    "emg_denervation":      {"points": 3,  "why": "EMG shows denervation"},
-    "conduction_block":     {"points": -3, "why": "Motor conduction block points to MMN, a treatable mimic"}
-  },
+  "rules": [
+    { "field": "painless",                    "when": true,  "points": 2,  "why": "Weakness is painless" },
+    { "field": "sensory_symptoms",            "when": false, "points": 1,  "why": "No numbness or tingling" },
+    { "field": "sensory_symptoms",            "when": true,  "points": -2, "why": "Numbness or tingling points to a nerve or root problem instead" },
+    { "field": "wasting",                     "when": true,  "points": 2,  "why": "Muscle wasting" },
+    { "field": "fasciculations",              "when": true,  "points": 1,  "why": "Fasciculations (muscle twitching)" },
+    { "field": "cramps",                      "when": true,  "points": 1,  "why": "Muscle cramps" },
+    { "field": "brisk_reflexes",              "when": true,  "points": 2,  "why": "Brisk reflexes (upper motor neuron sign)" },
+    { "field": "upgoing_plantar_or_hoffmann", "when": true,  "points": 2,  "why": "Up-going plantar or Hoffmann sign (upper motor neuron sign)" },
+    { "field": "normal_sensory_nerve_tests",  "when": true,  "points": 2,  "why": "Sensory nerves test normal despite weakness" },
+    { "field": "failed_local_treatment",      "when": true,  "points": 2,  "why": "No improvement after local treatment" },
+    { "field": "weight_loss",                 "when": true,  "points": 1,  "why": "Unintentional weight loss" },
+    { "field": "speech_or_swallow_change",    "when": true,  "points": 3,  "why": "Speech or swallowing change (bulbar sign)" },
+    { "field": "breathing_change",            "when": true,  "points": 2,  "why": "Breathing change" }
+  ],
 
-  "lmn_features": ["muscle_atrophy", "fasciculations", "reduced_reflexes", "emg_denervation"],
-  "umn_features": ["umn_signs"],
-  "motor_features": ["painless_weakness", "muscle_atrophy", "fasciculations", "umn_signs", "reduced_reflexes", "bulbar_symptoms", "emg_denervation"],
+  "spread_points": 3,
+  "spread_why": "Weakness has spread to a second region",
 
-  "pattern_points": {
-    "umn_and_lmn":     {"points": 3, "why": "Upper and lower motor neuron signs together (Gold Coast)"},
-    "lmn_two_regions": {"points": 3, "why": "Lower motor neuron signs in 2 or more body regions (Gold Coast)"},
-    "motor_spread":    {"points": 2, "why": "Motor problems in 2 or more body regions"}
-  },
+  "umn_plus_lmn_points": 3,
+  "umn_plus_lmn_why": "Upper and lower motor neuron signs together",
 
-  "gold_coast_rule": "Progression AND (UMN + LMN signs, OR LMN signs in 2+ regions) AND no conduction block -> urgent, whatever the score.",
+  "_gold_coast": "Risk is 'high' whatever the points if: UMN sign (brisk reflexes / up-going plantar / Hoffmann) AND LMN sign (wasting / fasciculations) AND getting worse (spread or failed local treatment).",
 
-  "recommendations": {
-    "urgent":  "Urgent referral to neurology (ALS / motor neuron disease clinic). Request EMG if not already done. Do not wait for further treatment trials.",
-    "monitor": "Possible early pattern. Re-examine in 4 to 6 weeks and refer to neurology if weakness spreads, wasting appears, or treatment does not help.",
-    "low":     "No ALS red-flag pattern in these notes."
+  "advice": {
+    "high":   "Urgent referral to neurology (ALS / motor neuron disease clinic) recommended. Ask for EMG if not done. Do not wait for more local treatment trials.",
+    "medium": "Possible early pattern. Re-examine in 4 to 6 weeks; refer to neurology if weakness spreads, wasting appears, or treatment does not help.",
+    "low":    "No ALS red-flag pattern in these notes."
   }
 }
