@@ -10,3 +10,4 @@ venv/
 # Claude Code (per-person)
 .claude/settings.local.json
 .claude/sessions/
+context/
