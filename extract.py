@@ -27,7 +27,7 @@ try:
 except ImportError:
     pass
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 MIN_SECONDS_BETWEEN_CALLS = float(os.getenv("GEMINI_MIN_INTERVAL", "7"))  # free tier
 CACHE_DIR = Path(__file__).parent / ".cache" / "extract"
 _last_call = 0.0
@@ -118,7 +118,7 @@ def extract_gemini(note: str, retries: int = 4) -> dict:
 _KEYWORDS: dict[str, list[str]] = {
     "sensory_symptoms": [r"numb", r"tingl", r"pins and needles", r"paraesthes|paresthes",
                          r"(reduced|decreased|diminished|loss of) sensation", r"sensory (loss|symptoms|change)"],
-    "wasting": [r"wast(ing|ed)", r"atroph", r"thin(ning)? (of )?(the )?(muscle|hand|calf|calves|thenar)"],
+    "wasting": [r"wast(ing|ed)", r"atroph", r"flatter|flattening", r"thin(ning)? (of )?(the )?(muscle|hand|calf|calves|thenar)"],
     "fasciculations": [r"fascicul", r"twitch"],
     "cramps": [r"cramp"],
     "brisk_reflexes": [r"brisk", r"hyperreflex", r"(increased|exaggerated|hyperactive) reflex", r"clonus", r"spastic"],
@@ -136,7 +136,7 @@ _SENSORY_NORMAL = [r"sensation (is |was )?(intact|normal|preserved)", r"(normal|
 _NCS_SENSORY_NORMAL = [r"sensory (nerve )?conduction(s| studies)? (is |are |were )?normal", r"normal sensory (nerve )?(conduction|responses|studies)",
                        r"sensory (responses|potentials|amplitudes) (are |were )?normal"]
 _NCS_SENSORY_ABNORMAL = [r"sensory (nerve )?conduction(s| studies)? (is |are |were )?(abnormal|reduced|slowed|prolonged)"]
-_WEAK = re.compile(r"weak|drop(ping)? (things|objects|cups|items)|difficulty (gripping|buttoning|doing up|opening)|"
+_WEAK = re.compile(r"weak|\bdropp(ing|ed|s)\b|tires? (quickly|easily)|difficulty (gripping|buttoning|doing up|opening)|"
                    r"trouble (gripping|doing up)|grip|foot drop|tripping|slurr|4/5|3/5")
 _PLACE = re.compile(r"\b(?:(left|right)\s+)?(hand|thumb|fingers?|wrist|forearm|arm|shoulder|grip|foot|ankle|leg|thigh|hip|"
                     r"knee|calf|toes?|speech|tongue|swallow\w*|neck)\b")
@@ -233,9 +233,20 @@ def extract_findings(note_text: str, offline: bool | None = None) -> dict:
     return extract_offline(note_text) if offline else extract_gemini(note_text)
 
 
+SAMPLE_NOTE = """Referral, 14 October 2024. Mountain Brow Family Health Team.
+Re: Right hand weakness and deteriorating handwriting, four months.
+Thank you for seeing Alex, a 45-year-old right-handed teacher who is otherwise well. Since June he has
+noticed that his handwriting fades across the page and that his right thumb and index finger tire quickly
+when writing on a whiteboard. He has started dropping his whiteboard marker and his coffee cup. No pain.
+No numbness or tingling. He reports some cramping in the right forearm at night.
+On examination the right thenar eminence looks a little flatter than the left. Grip is slightly weaker on the
+right. Phalen's test was equivocal. Sensation to light touch was normal in all fingers. I suspect a carpal
+tunnel syndrome or a median neuropathy at the wrist."""
+
+
 if __name__ == "__main__":
+    # python extract.py               -> runs on the built-in sample note
+    # python extract.py NOTE.txt      -> runs on a note file
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    if not args:
-        sys.exit("usage: python extract.py NOTE.txt [--offline]")
-    text = Path(args[0]).read_text(encoding="utf-8")
+    text = Path(args[0]).read_text(encoding="utf-8") if args else SAMPLE_NOTE
     print(json.dumps(extract_findings(text, offline=True if "--offline" in sys.argv else None), indent=2))

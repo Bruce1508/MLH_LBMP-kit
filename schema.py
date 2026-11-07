@@ -25,18 +25,18 @@ from pydantic import BaseModel, Field
 
 # Yes/no findings, with a plain-English meaning. The Gemini prompt is built from this.
 FLAGS: dict[str, str] = {
-    "painless": "The weakness is painless (no significant pain with it).",
-    "sensory_symptoms": "Numbness, tingling, pins and needles, or reduced sensation. (ALS usually has NONE.)",
-    "wasting": "Muscle wasting / atrophy: muscles visibly thinner, e.g. at the base of the thumb.",
-    "fasciculations": "Fasciculations: small visible muscle twitches under the skin.",
+    "painless": "The weakness is described without pain (\"no pain\" with weakness -> true).",
+    "sensory_symptoms": "Numbness, tingling, pins and needles, or sensory loss reported or found. (ALS usually has NONE.)",
+    "wasting": "Muscle wasting / atrophy / flattening (e.g. flatter thenar eminence) / limb circumference loss.",
+    "fasciculations": "Fasciculations: visible twitching or rippling under the skin.",
     "cramps": "Muscle cramps.",
-    "brisk_reflexes": "Brisk / hyperactive / increased reflexes, or clonus or spasticity.",
-    "upgoing_plantar_or_hoffmann": "Up-going plantar (positive Babinski) or positive Hoffmann sign.",
-    "normal_sensory_nerve_tests": "Nerve conduction study shows NORMAL sensory nerves.",
-    "failed_local_treatment": "No improvement after a local treatment, e.g. carpal tunnel surgery, splint, physio, injection.",
+    "brisk_reflexes": "Brisk, increased or hyperactive reflexes, or clonus or spasticity.",
+    "upgoing_plantar_or_hoffmann": "Extensor (up-going) plantar response / positive Babinski, or positive Hoffmann sign.",
+    "normal_sensory_nerve_tests": "Nerve conduction / sensory nerve studies reported as NORMAL.",
+    "failed_local_treatment": "A treatment aimed at a local cause (carpal tunnel surgery, splint, brace, physio, injection) did not help.",
     "weight_loss": "Unintentional weight loss.",
-    "speech_or_swallow_change": "Slurred speech, swallowing trouble, choking, or tongue wasting/twitching.",
-    "breathing_change": "Shortness of breath, breathless lying flat, or reduced breathing test (FVC).",
+    "speech_or_swallow_change": "Slurred or changed speech, voice change, coughing or choking when swallowing, tongue wasting/twitching.",
+    "breathing_change": "Shortness of breath, especially lying flat, or reduced vital capacity (FVC).",
 }
 
 FIELDS = ["date", "source", "weakness_regions", *FLAGS]
